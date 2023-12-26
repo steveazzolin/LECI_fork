@@ -105,6 +105,8 @@ class CommonArgs(Tap):
     task: Literal['train', 'test'] = None  #: Running mode. Allowed: 'train' and 'test'.
     random_seed: int = None  #: Fixed random seed for reproducibility.
     exp_round: int = None  #: Current experiment round.
+    seeds: str = None # Added by Steve
+    mitigation_backbone: str = None # Added by Steve
     pytest: bool = None
     pipeline: str = None  #: Training/test controller.
 

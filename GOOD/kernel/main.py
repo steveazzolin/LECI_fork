@@ -18,6 +18,8 @@ from GOOD.utils.initial import reset_random_seed
 from GOOD.utils.logger import load_logger
 from GOOD.definitions import OOM_CODE
 
+import numpy as np
+
 
 def initialize_model_dataset(config: Union[CommonArgs, Munch]) -> Tuple[torch.nn.Module, Union[dict, DataLoader]]:
     r"""
@@ -50,18 +52,37 @@ def initialize_model_dataset(config: Union[CommonArgs, Munch]) -> Tuple[torch.nn
 
 def main():
     args = args_parser()
-    config = config_summoner(args)
-    load_logger(config)
 
-    model, loader = initialize_model_dataset(config)
-    ood_algorithm = load_ood_alg(config.ood.ood_alg, config)
+    assert not args.seeds is None, args.seeds
 
-    pipeline = load_pipeline(config.pipeline, config.task, model, loader, ood_algorithm, config)
-    pipeline.load_task()
+    test_scores = []
+    for i, seed in enumerate(args.seeds.split("/")):
+        seed = int(seed)
+        print(f"\n\n#D#Running with seed = {seed}")
+        
+        args.random_seed = seed
+        args.exp_round = seed
+        
+        config = config_summoner(args)
+        config["mitigation_backbone"] = args.mitigation_backbone
+        print(config)
+        if i == 0:
+            load_logger(config)
+        
+        model, loader = initialize_model_dataset(config)
+        ood_algorithm = load_ood_alg(config.ood.ood_alg, config)
 
-    if config.task == 'train':
-        pipeline.task = 'test'
+        pipeline = load_pipeline(config.pipeline, config.task, model, loader, ood_algorithm, config)
         pipeline.load_task()
+
+        if config.task == 'train':
+            pipeline.task = 'test'
+            test_score, test_loss = pipeline.load_task()
+            test_scores.append(test_score)
+    print()
+    print()
+    print("Final OOD Test scores: ", round(np.mean(test_scores), 4), "+-", round(np.std(test_scores), 4))
+    print()
 
 
 def goodtg():

@@ -7,7 +7,7 @@ from cilog import create_logger
 from torch.utils.tensorboard import SummaryWriter
 
 pbar_setting = {'colour': '#a48fff', 'bar_format': '{l_bar}{bar:20}{r_bar}',
-                'dynamic_ncols': True, 'ascii': '░▒█'}
+                'dynamic_ncols': True, 'ascii': '░▒█', "disable": True}
 
 from GOOD.utils.config_reader import Union, CommonArgs, Munch
 

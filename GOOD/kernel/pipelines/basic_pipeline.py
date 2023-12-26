@@ -82,17 +82,17 @@ class Pipeline:
         Training pipeline. (Project use only)
         """
         # config model
-        print('#D#Config model')
+        print('Config model')
         self.config_model('train')
 
         # Load training utils
-        print('#D#Load training utils')
+        print('Load training utils')
         self.ood_algorithm.set_up(self.model, self.config)
 
         # train the model
         for epoch in range(self.config.train.ctn_epoch, self.config.train.max_epoch):
             self.config.train.epoch = epoch
-            print(f'#IN#Epoch {epoch}:')
+            print(f'Epoch {epoch}:')
 
             mean_loss = 0
             spec_loss = 0
@@ -132,17 +132,17 @@ class Pipeline:
             # Eval training score
 
             # Epoch val
-            print('#IN#\nEvaluating...')
+            print('Evaluating...')
             if self.ood_algorithm.spec_loss is not None:
                 if isinstance(self.ood_algorithm.spec_loss, dict):
                     desc = f'ML: {mean_loss:.4f}|'
                     for loss_name, loss_value in self.ood_algorithm.spec_loss.items():
                         desc += f'{loss_name}: {spec_loss[loss_name]:.4f}|'
-                    print(f'#IN#Approximated ' + desc[:-1])
+                    print(f'Approximated ' + desc[:-1])
                 else:
-                    print(f'#IN#Approximated average M/S Loss {mean_loss:.4f}/{spec_loss:.4f}')
+                    print(f'Approximated average M/S Loss {mean_loss:.4f}/{spec_loss:.4f}')
             else:
-                print(f'#IN#Approximated average training loss {mean_loss.cpu().item():.4f}')
+                print(f'Approximated average training loss {mean_loss.cpu().item():.4f}')
 
             epoch_train_stat = self.evaluate('eval_train')
             id_val_stat = self.evaluate('id_val')
@@ -156,7 +156,7 @@ class Pipeline:
             # --- scheduler step ---
             self.ood_algorithm.scheduler.step()
 
-        print('#IN#Training end.')
+        print('\nTraining end.\n')
 
     @torch.no_grad()
     def evaluate(self, split: str):
@@ -215,7 +215,7 @@ class Pipeline:
         # --------------- Metric calculation including ROC_AUC, Accuracy, AP.  --------------------
         stat['score'] = eval_score(pred_all, target_all, self.config)
 
-        print(f'#IN#\n{split.capitalize()} {self.config.metric.score_name}: {stat["score"]:.4f}\n'
+        print(f'{split.capitalize()} {self.config.metric.score_name}: {stat["score"]:.4f}'
               f'{split.capitalize()} Loss: {stat["loss"]:.4f}')
 
         self.model.train()
@@ -234,6 +234,7 @@ class Pipeline:
             # config model
             print('#D#Config model and output the best checkpoint info...')
             test_score, test_loss = self.config_model('test')
+            return test_score, test_loss
 
     def config_model(self, mode: str, load_param=False):
         r"""

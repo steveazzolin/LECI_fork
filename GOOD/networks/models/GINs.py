@@ -20,6 +20,8 @@ from .Classifiers import Classifier
 from .MolEncoders import AtomEncoder, BondEncoder
 from torch.nn import Identity
 
+import torch.nn.functional as F
+
 
 @register.model_register
 class GIN(GNNBasic):
@@ -124,19 +126,30 @@ class GINEncoder(BasicEncoder):
         # self.atom_encoder = AtomEncoder(config.model.dim_hidden)
         self.convs = nn.ModuleList()
         if kwargs.get('without_embed'):
-            self.convs.append(gnn.GINConv(nn.Sequential(nn.Linear(config.model.dim_hidden, 2 * config.model.dim_hidden),
+            self.convs.append(GINConvAttn(nn.Sequential(nn.Linear(config.model.dim_hidden, 2 * config.model.dim_hidden),
                                                nn.BatchNorm1d(2 * config.model.dim_hidden, track_running_stats=True), nn.ReLU(),
-                                               nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden))))
+                                               nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden)),
+                                               emb_dim=config.model.dim_hidden,
+                                               mitigation_backbone=config.mitigation_backbone))
         else:
-            self.convs.append(gnn.GINConv(nn.Sequential(nn.Linear(config.dataset.dim_node, 2 * config.model.dim_hidden),
-                                               nn.BatchNorm1d(2 * config.model.dim_hidden, track_running_stats=True), nn.ReLU(),
-                                               nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden))))
+            # if config.mitigation_backbone is None:
+            #     self.convs.append(gnn.GINConv(nn.Sequential(nn.Linear(config.dataset.dim_node, 2 * config.model.dim_hidden),
+            #                                     nn.BatchNorm1d(2 * config.model.dim_hidden, track_running_stats=True), nn.ReLU(),
+            #                                     nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden))))
+            # else:
+            self.convs.append(GINConvAttn(nn.Sequential(nn.Linear(config.dataset.dim_node, 2 * config.model.dim_hidden),
+                                            nn.BatchNorm1d(2 * config.model.dim_hidden, track_running_stats=True), nn.ReLU(),
+                                            nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden)),
+                                            emb_dim=config.dataset.dim_node,
+                                            mitigation_backbone=config.mitigation_backbone))
 
         self.convs = self.convs.extend(
             [
-                gnn.GINConv(nn.Sequential(nn.Linear(config.model.dim_hidden, 2 * config.model.dim_hidden),
-                                      nn.BatchNorm1d(2 * config.model.dim_hidden, track_running_stats=True), nn.ReLU(),
-                                      nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden)))
+                GINConvAttn(nn.Sequential(nn.Linear(config.model.dim_hidden, 2 * config.model.dim_hidden),
+                                    nn.BatchNorm1d(2 * config.model.dim_hidden, track_running_stats=True), nn.ReLU(),
+                                    nn.Linear(2 * config.model.dim_hidden, config.model.dim_hidden)),
+                                    emb_dim=config.model.dim_hidden,
+                                    mitigation_backbone=config.mitigation_backbone)
                 for _ in range(num_layer - 1)
             ]
         )
@@ -184,6 +197,56 @@ class GINEncoder(BasicEncoder):
                 post_conv = relu(post_conv)
             layer_feat.append(dropout(post_conv))
         return layer_feat[-1]
+    
+
+class GINConvAttn(gnn.MessagePassing):
+    def __init__(self, mlp, emb_dim, mitigation_backbone=None):
+        super(GINConvAttn, self).__init__(aggr="add")
+
+        self.mlp = mlp
+        self.eps = torch.nn.Parameter(torch.Tensor([0]))
+
+        self.mitigation_backbone = mitigation_backbone
+        if mitigation_backbone == "soft":
+            print("#D#Using soft mitigation")
+            self.mitigation_attn = torch.nn.Sequential(
+                torch.nn.Linear(2 * emb_dim, 1),
+            )
+        elif mitigation_backbone == "soft2":
+            print("#D#Using soft2 mitigation")
+            self.mitigation_attn = torch.nn.Sequential(
+                torch.nn.Linear(2 * emb_dim, emb_dim),
+                torch.nn.BatchNorm1d(emb_dim),
+                torch.nn.ReLU(),
+                torch.nn.Linear(emb_dim, 1)
+            )
+        else:
+            print("Using no mitigation")
+
+    def forward(self, x, edge_index, return_attn_distrib=False):
+        out = self.mlp((1 + self.eps) * x + self.propagate(edge_index, x=x, return_attn_distrib=return_attn_distrib))
+        return out
+
+    def message(self, x_i, x_j, return_attn_distrib):
+        if self.mitigation_backbone:
+            attn = self.mitigation_attn(torch.cat([x_i, x_j], dim=-1))
+            attn = torch.sigmoid(attn)
+            
+            if return_attn_distrib:
+                self.attn.extend(attn.detach().cpu().squeeze().numpy().tolist())
+            
+            # attn_hard = (attn > 0.5).float()
+            # attn = attn_hard - attn.detach() + attn
+
+            x_j = x_j * attn
+
+        # return F.relu(x_j)
+        return x_j
+
+    def update(self, aggr_out):
+        return aggr_out
+
+
 
 
 class GINMolEncoder(BasicEncoder):
@@ -323,6 +386,25 @@ class GINEConv(gnn.MessagePassing):
         #     # self.lin = Linear(edge_dim, config.model.dim_hidden)
         # else:
         #     self.lin = None
+
+        self.mitigation_backbone = config.mitigation_backbone
+        if self.mitigation_backbone == "soft":
+            print("#D#Using soft mitigation")
+            self.mitigation_attn = torch.nn.Sequential(
+                torch.nn.Linear(2 * in_channels, 1),
+            )
+        elif self.mitigation_backbone == "soft2":
+            print("#D#Using soft2 mitigation")
+            self.mitigation_attn = torch.nn.Sequential(
+                torch.nn.Linear(2 * in_channels, in_channels),
+                torch.nn.BatchNorm1d(in_channels),
+                torch.nn.ReLU(),
+                torch.nn.Linear(in_channels, 1)
+            )
+        else:
+            print("Using no mitigation")
+
+
         self.lin = None
         self.reset_parameters()
 
@@ -333,15 +415,14 @@ class GINEConv(gnn.MessagePassing):
             self.lin.reset_parameters()
 
     def forward(self, x: Union[Tensor, OptPairTensor], edge_index: Adj,
-                edge_attr: OptTensor = None, size: Size = None) -> Tensor:
-        """"""
+                edge_attr: OptTensor = None, size: Size = None, return_attn_distrib:bool = False) -> Tensor:
         if self.bone_encoder and edge_attr is not None:
             edge_attr = self.bone_encoder(edge_attr)
         if isinstance(x, Tensor):
             x: OptPairTensor = (x, x)
 
         # propagate_type: (x: OptPairTensor, edge_attr: OptTensor)
-        out = self.propagate(edge_index, x=x, edge_attr=edge_attr, size=size)
+        out = self.propagate(edge_index, x=x, edge_attr=edge_attr, size=size, return_attn_distrib=return_attn_distrib)
 
         x_r = x[1]
         if x_r is not None:
@@ -349,7 +430,7 @@ class GINEConv(gnn.MessagePassing):
 
         return self.nn(out)
 
-    def message(self, x_j: Tensor, edge_attr: Tensor) -> Tensor:
+    def message(self, x_i: Tensor, x_j: Tensor, edge_attr: Tensor, return_attn_distrib: bool = False) -> Tensor:
         if edge_attr is not None:
             if self.lin is None and x_j.size(-1) != edge_attr.size(-1):
                 raise ValueError("Node and edge feature dimensionalities do not "
@@ -362,6 +443,18 @@ class GINEConv(gnn.MessagePassing):
             m = x_j + edge_attr
         else:
             m = x_j
+
+        if self.mitigation_backbone:
+            attn = self.mitigation_attn(torch.cat([x_i, m], dim=-1))
+            attn = torch.sigmoid(attn)
+            
+            if return_attn_distrib:
+                self.attn.extend(attn.detach().cpu().squeeze().numpy().tolist())
+            
+            # attn_hard = (attn > 0.5).float()
+            # attn = attn_hard - attn.detach() + attn
+
+            m = m * attn
 
         return m.relu()
 

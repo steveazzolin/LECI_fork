@@ -160,6 +160,7 @@ class GAEAttNet(nn.Module):
         config_catt.model.model_layer = 2
         config_catt.model.dropout_rate = 0
         if kwargs.get('virtual_node'):
+            assert False
             self.gnn_node = vGINFeatExtractor(config_catt, without_readout=True, **kwargs)
         else:
             self.gnn_node = GINFeatExtractor(config_catt, without_readout=True, **kwargs)
