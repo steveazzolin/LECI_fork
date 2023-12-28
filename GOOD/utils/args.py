@@ -107,6 +107,7 @@ class CommonArgs(Tap):
     exp_round: int = None  #: Current experiment round.
     seeds: str = None # Added by Steve
     mitigation_backbone: str = None # Added by Steve
+    mitigation_sampling: str = "feat" # Added by Steve
     pytest: bool = None
     pipeline: str = None  #: Training/test controller.
 

@@ -207,13 +207,13 @@ class GINConvAttn(gnn.MessagePassing):
         self.eps = torch.nn.Parameter(torch.Tensor([0]))
 
         self.mitigation_backbone = mitigation_backbone
-        if mitigation_backbone == "soft":
-            print("#D#Using soft mitigation")
+        if mitigation_backbone == "soft" or mitigation_backbone == "hard":
+            print(f"#D#Using mitigation {mitigation_backbone}")
             self.mitigation_attn = torch.nn.Sequential(
                 torch.nn.Linear(2 * emb_dim, 1),
             )
-        elif mitigation_backbone == "soft2":
-            print("#D#Using soft2 mitigation")
+        elif mitigation_backbone == "soft2" or mitigation_backbone == "hard2":
+            print(f"#D#Using mitigation {mitigation_backbone}")
             self.mitigation_attn = torch.nn.Sequential(
                 torch.nn.Linear(2 * emb_dim, emb_dim),
                 torch.nn.BatchNorm1d(emb_dim),
@@ -221,7 +221,7 @@ class GINConvAttn(gnn.MessagePassing):
                 torch.nn.Linear(emb_dim, 1)
             )
         else:
-            print("Using no mitigation")
+            print(f"Using no mitigation ({mitigation_backbone})")
 
     def forward(self, x, edge_index, return_attn_distrib=False):
         out = self.mlp((1 + self.eps) * x + self.propagate(edge_index, x=x, return_attn_distrib=return_attn_distrib))
@@ -234,9 +234,9 @@ class GINConvAttn(gnn.MessagePassing):
             
             if return_attn_distrib:
                 self.attn.extend(attn.detach().cpu().squeeze().numpy().tolist())
-            
-            # attn_hard = (attn > 0.5).float()
-            # attn = attn_hard - attn.detach() + attn
+            if self.mitigation_backbone in ["hard", "hard2"]:
+                attn_hard = (attn > 0.5).float()
+                attn = attn_hard - attn.detach() + attn
 
             x_j = x_j * attn
 
@@ -388,12 +388,12 @@ class GINEConv(gnn.MessagePassing):
         #     self.lin = None
 
         self.mitigation_backbone = config.mitigation_backbone
-        if self.mitigation_backbone == "soft":
+        if self.mitigation_backbone == "soft" or self.mitigation_backbone == "hard":
             print("#D#Using soft mitigation")
             self.mitigation_attn = torch.nn.Sequential(
                 torch.nn.Linear(2 * in_channels, 1),
             )
-        elif self.mitigation_backbone == "soft2":
+        elif self.mitigation_backbone == "soft2" or self.mitigation_backbone == "hard2":
             print("#D#Using soft2 mitigation")
             self.mitigation_attn = torch.nn.Sequential(
                 torch.nn.Linear(2 * in_channels, in_channels),
@@ -450,9 +450,9 @@ class GINEConv(gnn.MessagePassing):
             
             if return_attn_distrib:
                 self.attn.extend(attn.detach().cpu().squeeze().numpy().tolist())
-            
-            # attn_hard = (attn > 0.5).float()
-            # attn = attn_hard - attn.detach() + attn
+            if self.mitigation_backbone in ["hard", "hard2"]:
+                attn_hard = (attn > 0.5).float()
+                attn = attn_hard - attn.detach() + attn
 
             m = m * attn
 

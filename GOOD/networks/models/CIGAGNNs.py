@@ -23,17 +23,26 @@ class CIGAGIN(GNNBasic):
 
     def __init__(self, config: Union[CommonArgs, Munch]):
         super(CIGAGIN, self).__init__(config)
+        self.contrast_rep = config.mitigation_sampling
+        assert self.contrast_rep in ["feat", "raw"], self.contrast_rep
+
         self.att_net = GAEAttNet(config.ood.ood_param, config)
         config_fe = copy.deepcopy(config)
-        config_fe.model.model_layer = config.model.model_layer - 2
-        self.feat_encoder = GINFeatExtractor(config_fe, without_embed=True)
+        if self.contrast_rep == "feat":
+            config_fe.model.model_layer = config.model.model_layer - 2
+        print("Using ", config_fe.model.model_layer, " layers")
+        config_fe.mitigation_backbone = None
+        self.feat_encoder = GINFeatExtractor(config_fe, without_embed=True if self.contrast_rep == "feat" else False)
 
         self.num_tasks = config.dataset.num_classes
         self.causal_lin = torch.nn.Linear(config.model.dim_hidden, self.num_tasks)
         self.spu_lin = torch.nn.Linear(config.model.dim_hidden, self.num_tasks)
 
-        self.contrast_rep = "feat"
+        
+        print(f"Using feature sampling = {self.contrast_rep}")
+        exit("debug")
         if type(config.ood.extra_param[-1]) == str:
+            assert False
             self.contrast_rep = config.ood.extra_param[-1]
 
         self.edge_mask = None
@@ -58,10 +67,10 @@ class CIGAGIN(GNNBasic):
         (spu_x, spu_edge_index, spu_edge_attr, spu_edge_weight, spu_batch), \
         pred_edge_weight, node_h, orig_x = self.att_net(*args, **kwargs)
 
-
         if self.contrast_rep == "raw":
             causal_x, _, __, ___ = relabel(orig_x, causal_edge_index, data.batch)
             spu_x, _, __, ___ = relabel(orig_x, spu_edge_index, data.batch)
+
 
         # --- Causal repr ---
         set_masks(causal_edge_weight, self)
@@ -160,7 +169,6 @@ class GAEAttNet(nn.Module):
         config_catt.model.model_layer = 2
         config_catt.model.dropout_rate = 0
         if kwargs.get('virtual_node'):
-            assert False
             self.gnn_node = vGINFeatExtractor(config_catt, without_readout=True, **kwargs)
         else:
             self.gnn_node = GINFeatExtractor(config_catt, without_readout=True, **kwargs)

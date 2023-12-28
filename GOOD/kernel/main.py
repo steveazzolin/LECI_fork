@@ -65,6 +65,7 @@ def main():
         
         config = config_summoner(args)
         config["mitigation_backbone"] = args.mitigation_backbone
+        config["mitigation_sampling"] = args.mitigation_sampling
         print(config)
         if i == 0:
             load_logger(config)
