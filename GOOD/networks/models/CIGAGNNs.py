@@ -28,9 +28,14 @@ class CIGAGIN(GNNBasic):
 
         self.att_net = GAEAttNet(config.ood.ood_param, config)
         config_fe = copy.deepcopy(config)
+
         if self.contrast_rep == "feat":
             config_fe.model.model_layer = config.model.model_layer - 2
-        print("Using ", config_fe.model.model_layer, " layers")
+        elif self.contrast_rep == "raw":
+            config_fe.model.model_layer = config.model.model_layer
+
+        print("Using ", config_fe.model.model_layer, " layers for classifier")
+        
         config_fe.mitigation_backbone = None
         self.feat_encoder = GINFeatExtractor(config_fe, without_embed=True if self.contrast_rep == "feat" else False)
 
@@ -38,9 +43,7 @@ class CIGAGIN(GNNBasic):
         self.causal_lin = torch.nn.Linear(config.model.dim_hidden, self.num_tasks)
         self.spu_lin = torch.nn.Linear(config.model.dim_hidden, self.num_tasks)
 
-        
         print(f"Using feature sampling = {self.contrast_rep}")
-        exit("debug")
         if type(config.ood.extra_param[-1]) == str:
             assert False
             self.contrast_rep = config.ood.extra_param[-1]

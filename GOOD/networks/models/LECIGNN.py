@@ -22,6 +22,7 @@ from munch import munchify
 from .MolEncoders import AtomEncoder, BondEncoder
 from GOOD.utils.fast_pytorch_kmeans import KMeans
 
+import copy
 
 @register.model_register
 class LECIGIN(GNNBasic):
@@ -36,42 +37,48 @@ class LECIGIN(GNNBasic):
             config.dataset.num_envs = 3
         # --- Test environment inference ---
 
-        self.config = config
+        self.config = copy.deepcopy(config)
 
         self.learn_edge_att = True
-        self.LA = config.ood.extra_param[0]
-        self.EC = config.ood.extra_param[1]      # Never used
-        self.EA = config.ood.extra_param[2]
-        self.EF = config.ood.extra_param[4]
+        self.LA = self.config.ood.extra_param[0]
+        self.EC = self.config.ood.extra_param[1]      # Never used
+        self.EA = self.config.ood.extra_param[2]
+        self.EF = self.config.ood.extra_param[4]
 
         fe_kwargs = {'without_embed': True if self.EF else False}
 
         # --- Build networks ---
-        self.sub_gnn = GINFeatExtractor(config, **fe_kwargs)
-        self.extractor = ExtractorMLP(config)
+        self.sub_gnn = GINFeatExtractor(self.config, **fe_kwargs)
+        self.config.mitigation_backbone = None
+        print(f"Using feature sampling = {self.config.mitigation_sampling}")
+        print(f"self.EF = {self.EF}")
 
-        self.ef_mlp = EFMLP(config, bn=True)
-        self.ef_discr_mlp = MLP([config.model.dim_hidden, 2 * config.model.dim_hidden, config.model.dim_hidden],
-                                 dropout=config.model.dropout_rate, config=config, bn=True)
+
+        self.extractor = ExtractorMLP(self.config)
+
+        self.ef_mlp = EFMLP(self.config, bn=True)
+        self.ef_discr_mlp = MLP([self.config.model.dim_hidden, 2 * self.config.model.dim_hidden, self.config.model.dim_hidden],
+                                 dropout=self.config.model.dropout_rate, config=self.config, bn=True)
         self.ef_pool = GlobalMeanPool()
-        self.ef_classifier = Classifier(munchify({'model': {'dim_hidden': config.model.dim_hidden},
-                                                   'dataset': {'num_classes': config.dataset.num_envs}}))
+        self.ef_classifier = Classifier(munchify({'model': {'dim_hidden': self.config.model.dim_hidden},
+                                                   'dataset': {'num_classes': self.config.dataset.num_envs}}))
 
 
 
-        self.lc_gnn = GINFeatExtractor(config, **fe_kwargs)
-        self.la_gnn = GINFeatExtractor(config, **fe_kwargs)
-        self.ec_gnn = GINFeatExtractor(config, **fe_kwargs)    # Never used
-        self.ea_gnn = GINFeatExtractor(config, **fe_kwargs)
+        self.lc_gnn = GINFeatExtractor(self.config, **fe_kwargs)
+        self.la_gnn = GINFeatExtractor(self.config, **fe_kwargs)
+        self.ec_gnn = GINFeatExtractor(self.config, **fe_kwargs)    # Never used
+        self.ea_gnn = GINFeatExtractor(self.config, **fe_kwargs)
 
-        self.lc_classifier = Classifier(config)
-        self.la_classifier = Classifier(config)
-        self.ec_classifier = Classifier(munchify({'model': {'dim_hidden': config.model.dim_hidden},
-                                                   'dataset': {'num_classes': config.dataset.num_envs}})) # Never used
-        self.ea_classifier = Classifier(munchify({'model': {'dim_hidden': config.model.dim_hidden},
-                                                  'dataset': {'num_classes': config.dataset.num_envs}}))
+        self.lc_classifier = Classifier(self.config)
+        self.la_classifier = Classifier(self.config)
+        self.ec_classifier = Classifier(munchify({'model': {'dim_hidden': self.config.model.dim_hidden},
+                                                   'dataset': {'num_classes': self.config.dataset.num_envs}})) # Never used
+        self.ea_classifier = Classifier(munchify({'model': {'dim_hidden': self.config.model.dim_hidden},
+                                                  'dataset': {'num_classes': self.config.dataset.num_envs}}))
 
         self.edge_mask = None
+        exit("debug")
 
 
 
@@ -179,6 +186,7 @@ class LECIvGIN(LECIGIN):
 
     def __init__(self, config: Union[CommonArgs, Munch]):
         super(LECIvGIN, self).__init__(config)
+        assert False
         fe_kwargs = {'without_embed': True if self.EF else False}
         self.sub_gnn = vGINFeatExtractor(config, **fe_kwargs)
         self.lc_gnn = vGINFeatExtractor(config, **fe_kwargs)
